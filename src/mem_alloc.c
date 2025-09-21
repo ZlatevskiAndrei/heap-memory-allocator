@@ -4,10 +4,10 @@
 #include <string.h>
 
 #include <sys/types.h>
+#include <sys/param.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-
 
 
 #include "mem_alloc_types.h"
@@ -74,11 +74,73 @@ void memory_init(void)
 
 void *memory_alloc(size_t size){
 
-    //void print_alloc_info(void *addr, int requested_size)
-    //void print_alloc_error(int requested_size) 
-    
+    if(size > HEAP_SIZE){ //should never happen
+        print_alloc_error(size);
+        exit(0);
+    }
 
-    return NULL;
+    memblk_free_t *first_free_copy = first_free; //we don't want to modify the global pointer!!
+    uint64_t *result = NULL;
+    uint32_t free_block_size;
+    uint32_t total_free_block_size; //including the header
+    uint16_t free_block_magic_num;
+    memblk_allocated_t *new_alloc;
+    memblk_free_t *parent_free_block = NULL;
+    size_t max_header_size = MAX(sizeof(memblk_free_t), sizeof(memblk_allocated_t));
+
+    while(first_free_copy != NULL){
+        free_block_size = first_free_copy->size;
+        free_block_magic_num = first_free_copy->magic_number;
+        total_free_block_size = free_block_size + sizeof(memblk_free_t);
+        if(total_free_block_size > size + sizeof(memblk_allocated_t)) { //we have sufficient space to allocate mem
+            if(total_free_block_size - (size + sizeof(memblk_allocated_t)) > max_header_size){ //choice between split or not
+                // we split..
+                first_free_copy->size = free_block_size - (size + sizeof(memblk_allocated_t));
+                new_alloc = (memblk_allocated_t*) sizeof(memblk_free_t) + first_free_copy->size;
+                new_alloc->size = size; //as intended
+                new_alloc->free = 0; //0 -> false, 1 -> true
+                new_alloc->magic_number = first_free_copy->magic_number;
+                first_free_copy->magic_number = (uint16_t) rand() % HEAP_SIZE; //still unsure about the magic num logic
+                new_alloc->payload = (uint64_t*)new_alloc + sizeof(memblk_allocated_t);
+                result = new_alloc->payload;
+                //we do not modify the parent->next pointer as the current free block still exists! 
+
+            }
+            else {
+                //we keep the entire block for ourselves
+                new_alloc = (memblk_allocated_t*)first_free_copy;
+                new_alloc->size = total_free_block_size - sizeof(memblk_allocated_t);
+                new_alloc->free = 0; //0 -> false, 1 -> true
+                new_alloc->magic_number = free_block_magic_num;
+                new_alloc->payload = (uint64_t*)new_alloc + sizeof(memblk_allocated_t);
+                result = new_alloc->payload;
+                if(parent_free_block != NULL){
+                    parent_free_block->next = first_free_copy->next;
+                }
+            }
+            break; //we finished our duty and found a free space
+        }
+        else { // we're searching for the next free block struct and update the parent pointer
+            if(first_free_copy->next != NULL){
+                parent_free_block = first_free_copy;
+                first_free_copy = first_free_copy->next;
+            }
+            else { // we didn't find a free space for the specific alloc req
+                first_free_copy = NULL; // we didn't find a free space for the specific alloc req
+                print_alloc_error(size);
+                exit(0);
+            }
+        }
+    }
+
+    //Time to check if we're updating the first_free pointer
+    if(first_free_copy == first_free){ //we chose the FIRST available space that was sufficient, so we update first_free
+        first_free = first_free->next;
+    }
+
+
+    print_alloc_info((uint64_t*) result, size);
+    return result;
 }
 
 void memory_free(void *p)
