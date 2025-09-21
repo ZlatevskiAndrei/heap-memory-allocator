@@ -96,7 +96,7 @@ void *memory_alloc(size_t size){
             if(total_free_block_size - (size + sizeof(memblk_allocated_t)) > max_header_size){ //choice between split or not
                 // we split..
                 first_free_copy->size = free_block_size - (size + sizeof(memblk_allocated_t));
-                new_alloc = (memblk_allocated_t*) sizeof(memblk_free_t) + first_free_copy->size;
+                new_alloc = (memblk_allocated_t*) first_free_copy + sizeof(memblk_free_t) + first_free_copy->size;
                 new_alloc->size = size; //as intended
                 new_alloc->free = 0; //0 -> false, 1 -> true
                 new_alloc->magic_number = first_free_copy->magic_number;
