@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 
+
 #include "mem_alloc_types.h"
 #include "my_mmap.h"
 
@@ -21,8 +22,9 @@ memblk_free_t *first_free;
 
 #define ULONG(x)((long unsigned int)(x))
 
-#if defined(FIRST_FIT)
 
+#if defined(FIRST_FIT)
+ 
 /* TODO: code specific to the FIRST FIT allocation policy can be
  * inserted here */
 
@@ -46,9 +48,14 @@ memblk_free_t *first_free;
 
 void run_at_exit(void)
 {
-    fprintf(stderr,"YEAH B-)\n");
-    
-    /* TODO: insert your code here */
+    debug_printf("Starting munmap procedure at %s\n", __FUNCTION__);
+    int res = my_munmap(heap_begin, HEAP_SIZE);
+    first_free = NULL;
+    if(res != 0){
+        debug_printf("munmap failed, res is %d\n", res);
+        exit(0);
+    }    
+    debug_printf("Exiting %s ...\n", __FUNCTION__);
 }
 
 
@@ -56,24 +63,21 @@ void run_at_exit(void)
 
 void memory_init(void)
 {
-    /* register the function that will be called when the programs exits */
     atexit(run_at_exit);
-
-    /* TODO: insert your code here */
-
-    /* TODO: start by using the provided my_mmap function to allocate
-     * the memory region you are going to manage */
-
+    heap_begin = (uint64_t*) my_mmap(HEAP_SIZE);
+    assert(heap_begin != NULL);
+    debug_printf("Started memory init at %p\n", heap_begin);
+    first_free->size = (uint32_t) HEAP_SIZE - sizeof(memblk_free_t);
+    first_free->magic_number = (uint16_t) rand() % HEAP_SIZE; //to be checked about the convention
+    first_free->next = NULL;
 }
 
-void *memory_alloc(size_t size)
-{
+void *memory_alloc(size_t size){
 
-    /* TODO: insert your code here */
-
-    /* TODO : don't forget to call the function print_alloc_info()
-     * appropriately */
+    //void print_alloc_info(void *addr, int requested_size)
+    //void print_alloc_error(int requested_size) 
     
+
     return NULL;
 }
 

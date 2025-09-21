@@ -1,19 +1,21 @@
 #ifndef   	_MEM_ALLOC_TYPES_H_
 #define   	_MEM_ALLOC_TYPES_H_
+#include <stdint.h>
 
+#define HEAP_SIZE 524288// possibly multiple of 8 because 64-bit address space, 512KB for now
 
-
-/* Structure declaration for a free block */
 struct memblk_free{
-    size_t size;
-    /* TODO: DEFINE */
+    uint32_t size;
+    uint16_t magic_number;
+    struct memblk_free *next;
 }; 
 typedef struct memblk_free memblk_free_t; 
 
-/* Specific metadata for allocated blocks */
 struct memblk_allocated{
-    size_t size;
-    /* TODO: DEFINE */
+    uint32_t size;
+    bool free;
+    uint16_t magic_number;
+    uint64_t *payload;
 };
 typedef struct memblk_allocated memblk_allocated_t;
 
