@@ -138,7 +138,7 @@ void *memory_alloc(size_t size){
         first_free = first_free->next;
     }
 
-
+    //What do we do with new_alloc struct, is this enough?
     print_alloc_info((uint64_t*) result, size);
     return result;
 }
