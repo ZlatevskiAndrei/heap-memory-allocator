@@ -67,13 +67,13 @@ void memory_init(void)
     heap_begin = (uint64_t*) my_mmap(MEM_POOL_SIZE);
     assert(heap_begin != NULL);
     debug_printf("Started memory init at %p\n", heap_begin);
+    first_free = (memblk_free_t*)heap_begin;
     first_free->size = (uint32_t) MEM_POOL_SIZE - sizeof(memblk_free_t);
     first_free->magic_number = (uint16_t) rand() % MEM_POOL_SIZE; //to be checked about the convention
     first_free->next = NULL;
 }
 
-void *memory_alloc(size_t size){// ako sizeof(header) = 8 bytes primeri prajsh header *hptr = (header*) ptr - 1 mu kazvash na kompajlero da se dvizhish za 8 bytes oti cast prajsh za vreme na aritmetickata operacija !!
-                                // glej gi liniite kaj sho prajsh pointer arithmetic....
+void *memory_alloc(size_t size){ 
 
     if(size > MEM_POOL_SIZE){ //should never happen
         print_alloc_error(size);
@@ -100,30 +100,40 @@ void *memory_alloc(size_t size){// ako sizeof(header) = 8 bytes primeri prajsh h
         free_block_magic_num = first_free_copy->magic_number;
         total_free_block_size = free_block_size + sizeof(memblk_free_t);
         if(total_free_block_size > size + sizeof(memblk_allocated_t)) { //we have sufficient space to allocate mem
-            if(total_free_block_size - (size + sizeof(memblk_allocated_t)) > max_header_size){ //choice between split or not
+            if(total_free_block_size - (size + sizeof(memblk_allocated_t)) >= max_header_size){ //choice between split or not
                 // we split..
-                first_free_copy->size = free_block_size - (size + sizeof(memblk_allocated_t));
-                new_alloc = (memblk_allocated_t*) first_free_copy + sizeof(memblk_free_t) + first_free_copy->size;
-                new_alloc->size = size; //as intended
-                new_alloc->free = 0; //0 -> false, 1 -> true
-                new_alloc->magic_number = first_free_copy->magic_number;
-                first_free_copy->magic_number = (uint16_t) rand() % MEM_POOL_SIZE; //still unsure about the magic num logic
-                new_alloc->payload = (uint64_t*)new_alloc + sizeof(memblk_allocated_t);
-                result = new_alloc->payload;
-                //we do not modify the parent->next pointer as the current free block still exists! 
+                memblk_allocated_t* new_alloc = (memblk_allocated_t*) first_free_copy;
+                new_alloc->size = size;
+                new_alloc->free = 0;
+                new_alloc->magic_number = (uint16_t)(rand() % MEM_POOL_SIZE);
+                new_alloc->payload = (uint64_t*)((uint8_t*)new_alloc + sizeof(memblk_allocated_t));
 
+                memblk_free_t* new_free = (memblk_free_t*) ((uint8_t*)new_alloc + sizeof(memblk_allocated_t) + size);
+                new_free->size = free_block_size - (sizeof(memblk_allocated_t) + size);
+                new_free->magic_number = (uint16_t)(rand() % MEM_POOL_SIZE); 
+                new_free->next = first_free_copy->next;
+                result = new_alloc->payload;
+                if(parent_free_block == NULL){
+                    first_free = new_free;
+                }
+                else {
+                    parent_free_block->next = new_free;
+                }
             }
             else {
                 //we keep the entire block for ourselves
-                new_alloc = (memblk_allocated_t*)first_free_copy;
-                new_alloc->size = total_free_block_size - sizeof(memblk_allocated_t);
-                new_alloc->free = 0; //0 -> false, 1 -> true
-                new_alloc->magic_number = free_block_magic_num;
-                new_alloc->payload = (uint64_t*)new_alloc + sizeof(memblk_allocated_t);
-                result = new_alloc->payload;
                 if(parent_free_block != NULL){
                     parent_free_block->next = first_free_copy->next;
                 }
+                else{
+                    first_free = first_free_copy->next;
+                }
+                new_alloc = (memblk_allocated_t*) first_free_copy;
+                new_alloc->size = total_free_block_size - sizeof(memblk_allocated_t);
+                new_alloc->free = 0; 
+                new_alloc->magic_number = free_block_magic_num;
+                new_alloc->payload = (uint64_t*)((uint8_t*)new_alloc + sizeof(memblk_allocated_t));
+                result = new_alloc->payload;
             }
             break; //we finished our duty and found a free space
         }
@@ -139,39 +149,46 @@ void *memory_alloc(size_t size){// ako sizeof(header) = 8 bytes primeri prajsh h
             }
         }
     }
-
-    //Time to check if we're updating the first_free pointer
-    if(first_free_copy == first_free){ //we chose the FIRST available space that was sufficient, so we update first_free
-        first_free = first_free->next;
-    }
-
-    //What do we do with new_alloc struct, is this enough?
+   
     print_alloc_info((uint64_t*) result, size);
     return result;
 }
 
 void memory_free(void *p)
 {
-    
-    memblk_allocated_t *full_alloc_block = (memblk_allocated_t*)((uintptr_t*)p - sizeof(memblk_allocated_t));
+    print_free_info(p);
+
+    if(p == NULL){
+        debug_printf("Pointer argument is NULL at %s \n", __FUNCTION__); //added this base case
+        exit(0);
+    }
+
+    memblk_allocated_t *full_alloc_block = (memblk_allocated_t*)((uint8_t*)p - sizeof(memblk_allocated_t)); // modified here
 
     full_alloc_block->free=1;
     
     memblk_free_t *free_block=(memblk_free_t *) full_alloc_block;
 
     free_block->size=full_alloc_block->size;
-    free_block->magic_number=full_alloc_block->magic_number;
+    free_block->magic_number=full_alloc_block->magic_number; //we still don't know..
 
+    if(first_free == NULL){ //added this condition in case the heap is full so we don't have to follow with the rest of the code
+        first_free = free_block;
+        free_block->next = NULL;
+        return;
+    }
 
     memblk_free_t *left = NULL;
     memblk_free_t *right = first_free;
 
-    while(right !=NULL && free_block>right){
-        left=right;
-        right=right->next;
+    while (right != NULL && free_block >= right) { //replaced > by >=
+        left = right;
+        right = right->next;
     }
+
     free_block->next=right;
-    if (left=NULL)
+
+    if (left == NULL)
     {
         first_free=free_block;
     }
@@ -180,40 +197,37 @@ void memory_free(void *p)
     }
 
     if(free_block->next!=NULL){
-        memblk_free_t *end_free_block=(memblk_free_t*)((uintptr_t)free_block+ sizeof(memblk_free_t)+ free_block->size);
+        memblk_free_t *end_free_block=(memblk_free_t*)((uint8_t*)free_block + sizeof(memblk_free_t) + free_block->size); //modified here
 
         if(end_free_block==free_block->next){
             free_block->size=free_block->size+free_block->next->size+sizeof(memblk_free_t);
             free_block->next=free_block->next->next; 
-            
-        
         }
     }
     
     if(left!=NULL){
-        memblk_free_t *end_left_block=(memblk_free_t*)((uintptr_t)left+sizeof(memblk_free_t)+left->size);
+        memblk_free_t *end_left_block=(memblk_free_t*)((uint8_t*)left + sizeof(memblk_free_t) + left->size); //modified here
         if(end_left_block==free_block){
             left->size=free_block->size+left->size+sizeof(memblk_free_t);
             left->next=free_block->next;
             free_block=left;
         }
-
     }
-
-    /* TODO : don't forget to call the function print_free_info()
-     * appropriately */
-
 }
 
 size_t memory_get_allocated_block_size(void *addr)
 {
+    if(addr == NULL){
+        debug_printf("Trying to access address NULL at %s \n",__FUNCTION__);
+        exit(0);
+    }
+    
+    memblk_allocated_t *full_alloc_block = (memblk_allocated_t*)((uint8_t*)addr - sizeof(memblk_allocated_t)); 
 
-    /* TODO: insert your code here */
-
-    return 0;
+    return full_alloc_block->size;
 }
 
-
+    
 void print_mem_state(void)
 {
     /* TODO: insert your code here */
