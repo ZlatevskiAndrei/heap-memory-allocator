@@ -121,7 +121,7 @@ test_ps: libmalloc.so
 
 %.out.expected: %.in bin/mem_shell_sim
 	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:./lib ; \
-	cat $< | bin/mem_shell_sim ${MEM_POOL_SIZE} ${ALLOC_POLICY} ${MEM_ALIGNMENT} 2>&1 | grep -E '^ALLOC|^FREE' >$@
+	cat $< | bin/mem_shell_sim ${MEM_POOL_SIZE} ${ALLOCATION_POLICY} ${MEM_ALIGNMENT} 2>&1 | grep -E '^ALLOC|^FREE' >$@
 
 %.test: %.out %.out.expected
 	@if diff $^  >/dev/null; then \

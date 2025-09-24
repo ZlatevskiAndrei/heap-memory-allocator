@@ -49,7 +49,7 @@ memblk_free_t *first_free;
 void run_at_exit(void)
 {
     debug_printf("Starting munmap procedure at %s\n", __FUNCTION__);
-    int res = my_munmap(heap_begin, HEAP_SIZE);
+    int res = my_munmap(heap_begin, MEM_POOL_SIZE);
     first_free = NULL;
     if(res != 0){
         debug_printf("munmap failed, res is %d\n", res);
@@ -64,22 +64,29 @@ void run_at_exit(void)
 void memory_init(void)
 {
     atexit(run_at_exit);
-    heap_begin = (uint64_t*) my_mmap(HEAP_SIZE);
+    heap_begin = (uint64_t*) my_mmap(MEM_POOL_SIZE);
     assert(heap_begin != NULL);
     debug_printf("Started memory init at %p\n", heap_begin);
-    first_free->size = (uint32_t) HEAP_SIZE - sizeof(memblk_free_t);
-    first_free->magic_number = (uint16_t) rand() % HEAP_SIZE; //to be checked about the convention
+    first_free->size = (uint32_t) MEM_POOL_SIZE - sizeof(memblk_free_t);
+    first_free->magic_number = (uint16_t) rand() % MEM_POOL_SIZE; //to be checked about the convention
     first_free->next = NULL;
 }
 
-void *memory_alloc(size_t size){
+void *memory_alloc(size_t size){// ako sizeof(header) = 8 bytes primeri prajsh header *hptr = (header*) ptr - 1 mu kazvash na kompajlero da se dvizhish za 8 bytes oti cast prajsh za vreme na aritmetickata operacija !!
+                                // glej gi liniite kaj sho prajsh pointer arithmetic....
 
-    if(size > HEAP_SIZE){ //should never happen
+    if(size > MEM_POOL_SIZE){ //should never happen
         print_alloc_error(size);
         exit(0);
     }
 
     memblk_free_t *first_free_copy = first_free; //we don't want to modify the global pointer!!
+
+    if(first_free_copy == NULL) { // not a single free node found..so we terminate here
+        print_alloc_error(size);
+        exit(0);
+    }
+
     uint64_t *result = NULL;
     uint32_t free_block_size;
     uint32_t total_free_block_size; //including the header
@@ -100,7 +107,7 @@ void *memory_alloc(size_t size){
                 new_alloc->size = size; //as intended
                 new_alloc->free = 0; //0 -> false, 1 -> true
                 new_alloc->magic_number = first_free_copy->magic_number;
-                first_free_copy->magic_number = (uint16_t) rand() % HEAP_SIZE; //still unsure about the magic num logic
+                first_free_copy->magic_number = (uint16_t) rand() % MEM_POOL_SIZE; //still unsure about the magic num logic
                 new_alloc->payload = (uint64_t*)new_alloc + sizeof(memblk_allocated_t);
                 result = new_alloc->payload;
                 //we do not modify the parent->next pointer as the current free block still exists! 
@@ -145,8 +152,53 @@ void *memory_alloc(size_t size){
 
 void memory_free(void *p)
 {
+    
+    memblk_allocated_t *full_alloc_block = (memblk_allocated_t*)((uintptr_t*)p - sizeof(memblk_allocated_t));
 
-    /* TODO: insert your code here */
+    full_alloc_block->free=1;
+    
+    memblk_free_t *free_block=(memblk_free_t *) full_alloc_block;
+
+    free_block->size=full_alloc_block->size;
+    free_block->magic_number=full_alloc_block->magic_number;
+
+
+    memblk_free_t *left = NULL;
+    memblk_free_t *right = first_free;
+
+    while(right !=NULL && free_block>right){
+        left=right;
+        right=right->next;
+    }
+    free_block->next=right;
+    if (left=NULL)
+    {
+        first_free=free_block;
+    }
+    else{
+        left->next=free_block;
+    }
+
+    if(free_block->next!=NULL){
+        memblk_free_t *end_free_block=(memblk_free_t*)((uintptr_t)free_block+ sizeof(memblk_free_t)+ free_block->size);
+
+        if(end_free_block==free_block->next){
+            free_block->size=free_block->size+free_block->next->size+sizeof(memblk_free_t);
+            free_block->next=free_block->next->next; 
+            
+        
+        }
+    }
+    
+    if(left!=NULL){
+        memblk_free_t *end_left_block=(memblk_free_t*)((uintptr_t)left+sizeof(memblk_free_t)+left->size);
+        if(end_left_block==free_block){
+            left->size=free_block->size+left->size+sizeof(memblk_free_t);
+            left->next=free_block->next;
+            free_block=left;
+        }
+
+    }
 
     /* TODO : don't forget to call the function print_free_info()
      * appropriately */

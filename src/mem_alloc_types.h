@@ -2,8 +2,6 @@
 #define   	_MEM_ALLOC_TYPES_H_
 #include <stdint.h>
 
-#define HEAP_SIZE 524288// possibly multiple of 8 because 64-bit address space, 512KB for now
-
 struct memblk_free{
     uint32_t size;
     uint16_t magic_number;
