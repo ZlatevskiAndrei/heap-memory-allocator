@@ -164,7 +164,10 @@ void memory_free(void *p)
 
     memblk_allocated_t *full_alloc_block = (memblk_allocated_t*)((uint8_t*)p - sizeof(memblk_allocated_t)); // modified here
 
-    //if... 
+    if(full_alloc_block->free) {
+        debug_printf("Called free on a free block addr at %s\n",__FUNCTION__);
+        exit(0);
+    }
 
     full_alloc_block->free=1;
     
