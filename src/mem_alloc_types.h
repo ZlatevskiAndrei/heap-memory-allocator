@@ -4,7 +4,6 @@
 
 struct memblk_free{
     uint32_t size;
-    uint16_t magic_number;
     struct memblk_free *next;
 }; 
 typedef struct memblk_free memblk_free_t; 
@@ -12,7 +11,6 @@ typedef struct memblk_free memblk_free_t;
 struct memblk_allocated{
     uint32_t size;
     bool free;
-    uint16_t magic_number;
     uint64_t *payload;
 };
 typedef struct memblk_allocated memblk_allocated_t;

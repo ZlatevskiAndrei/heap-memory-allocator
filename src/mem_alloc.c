@@ -13,6 +13,10 @@
 #include "mem_alloc_types.h"
 #include "my_mmap.h"
 
+//TODO: usage of the byte ->free, magic number logic, First Fit already implemented, print mem state,
+//possible optimisations?
+
+
 /* pointer to the beginning of the memory region to manage */
 void *heap_begin;
 
@@ -70,7 +74,6 @@ void memory_init(void)
     debug_printf("Started memory init at %p\n", heap_begin);
     first_free = (memblk_free_t*)heap_begin;
     first_free->size = (uint32_t) MEM_POOL_SIZE - sizeof(memblk_free_t);
-    first_free->magic_number = (uint16_t) rand() % MEM_POOL_SIZE; //to be checked about the convention
     first_free->next = NULL;
 }
 
@@ -91,14 +94,12 @@ void *memory_alloc(size_t size){
     uint64_t *result = NULL;
     uint32_t free_block_size;
     uint32_t total_free_block_size; //including the header
-    uint16_t free_block_magic_num;
     memblk_allocated_t *new_alloc;
     memblk_free_t *parent_free_block = NULL;
     size_t max_header_size = MAX(sizeof(memblk_free_t), sizeof(memblk_allocated_t));
 
     while(first_free_copy != NULL){
         free_block_size = first_free_copy->size;
-        free_block_magic_num = first_free_copy->magic_number;
         total_free_block_size = free_block_size + sizeof(memblk_free_t);
         if(total_free_block_size > size + sizeof(memblk_allocated_t)) { //we have sufficient space to allocate mem
             if(total_free_block_size - (size + sizeof(memblk_allocated_t)) >= max_header_size){ //choice between split or not
@@ -106,12 +107,10 @@ void *memory_alloc(size_t size){
                 memblk_allocated_t* new_alloc = (memblk_allocated_t*) first_free_copy;
                 new_alloc->size = size;
                 new_alloc->free = 0;
-                new_alloc->magic_number = (uint16_t)(rand() % MEM_POOL_SIZE);
                 new_alloc->payload = (uint64_t*)((uint8_t*)new_alloc + sizeof(memblk_allocated_t));
 
                 memblk_free_t* new_free = (memblk_free_t*) ((uint8_t*)new_alloc + sizeof(memblk_allocated_t) + size);
                 new_free->size = free_block_size - (sizeof(memblk_allocated_t) + size);
-                new_free->magic_number = (uint16_t)(rand() % MEM_POOL_SIZE); 
                 new_free->next = first_free_copy->next;
                 result = new_alloc->payload;
                 if(parent_free_block == NULL){
@@ -132,7 +131,6 @@ void *memory_alloc(size_t size){
                 new_alloc = (memblk_allocated_t*) first_free_copy;
                 new_alloc->size = total_free_block_size - sizeof(memblk_allocated_t);
                 new_alloc->free = 0; 
-                new_alloc->magic_number = free_block_magic_num;
                 new_alloc->payload = (uint64_t*)((uint8_t*)new_alloc + sizeof(memblk_allocated_t));
                 result = new_alloc->payload;
             }
@@ -166,12 +164,13 @@ void memory_free(void *p)
 
     memblk_allocated_t *full_alloc_block = (memblk_allocated_t*)((uint8_t*)p - sizeof(memblk_allocated_t)); // modified here
 
+    //if... 
+
     full_alloc_block->free=1;
     
     memblk_free_t *free_block=(memblk_free_t *) full_alloc_block;
 
     free_block->size=full_alloc_block->size;
-    free_block->magic_number=full_alloc_block->magic_number; //we still don't know..
 
     if(first_free == NULL){ //added this condition in case the heap is full so we don't have to follow with the rest of the code
         first_free = free_block;
@@ -231,7 +230,10 @@ size_t memory_get_allocated_block_size(void *addr)
     
 void print_mem_state(void)
 {
-    /* TODO: insert your code here */
+    /* 
+    
+    
+    */
 }
 
 
