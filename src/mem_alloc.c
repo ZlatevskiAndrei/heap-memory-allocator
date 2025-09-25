@@ -101,7 +101,7 @@ void *memory_alloc(size_t size){
     while(first_free_copy != NULL){
         free_block_size = first_free_copy->size;
         total_free_block_size = free_block_size + sizeof(memblk_free_t);
-        if(total_free_block_size > size + sizeof(memblk_allocated_t)) { //we have sufficient space to allocate mem
+        if(total_free_block_size >= size + sizeof(memblk_allocated_t)) { //we have sufficient space to allocate mem
             if(total_free_block_size - (size + sizeof(memblk_allocated_t)) >= max_header_size){ //choice between split or not
                 // we split..
                 memblk_allocated_t* new_alloc = (memblk_allocated_t*) first_free_copy;
@@ -231,12 +231,31 @@ size_t memory_get_allocated_block_size(void *addr)
 }
 
     
-void print_mem_state(void)
-{
-    /* 
-    
-    
-    */
+void print_mem_state(void){
+    fprintf(stdout, "[");
+    size_t iter = 0;
+    uint64_t* p = heap_begin;
+    memblk_free_t* first_free_copy = first_free; //again, we do not want to modify the global pointer
+    size_t end = MEM_POOL_SIZE;
+    while(iter < end){
+        if((uint64_t*)first_free_copy == p){ //it's a free block
+            for(int i = 0; i< sizeof(memblk_free_t) + first_free_copy->size; i++){
+                fprintf(stdout, ".");
+            }
+            p = (uint64_t*)((uint8_t*)p + sizeof(memblk_free_t) + first_free_copy->size);
+            iter += sizeof(memblk_free_t) + first_free_copy->size;
+            first_free_copy = first_free_copy->next;
+        }
+        else { //it's an alloc block
+            memblk_allocated_t* alloc = (memblk_allocated_t*) p;
+            for(int i = 0; i< sizeof(memblk_allocated_t) + alloc->size; i++){
+                fprintf(stdout, "X");
+            }
+            p = (uint64_t*)((uint8_t*)p + sizeof(memblk_allocated_t) + alloc->size);
+            iter += sizeof(memblk_allocated_t) + alloc->size;
+        }
+    }
+    fprintf(stdout, "]\n");
 }
 
 
