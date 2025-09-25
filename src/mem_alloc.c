@@ -32,6 +32,7 @@ memblk_free_t *first_free;
  * symbol FIRST_FIT is defined, that is, only if the selected policy
  * is FF */
 
+ void* memory_alloc(size_t size);
 
 #elif defined(BEST_FIT)
 
