@@ -13,9 +13,6 @@
 #include "mem_alloc_types.h"
 #include "my_mmap.h"
 
-//TODO: usage of the byte ->free, magic number logic, First Fit already implemented, print mem state,
-//possible optimisations?
-
 
 /* pointer to the beginning of the memory region to manage */
 void *heap_begin;
@@ -77,84 +74,137 @@ void memory_init(void)
     first_free->next = NULL;
 }
 
-void *memory_alloc(size_t size){ 
+void *memory_alloc(size_t size){
+    memblk_free_t *block_fit = NULL;
+    memblk_free_t *parent_free_block = NULL;
+   // memblk_free_t *first_free_copy = first_free;
 
-    if(size > MEM_POOL_SIZE){ //should never happen
+    #if defined(FIRST_FIT)
+    
+    memblk_free_t *right = first_free;
+    memblk_free_t *left = NULL;
+    while (right != NULL) {
+        uint32_t full_free = right->size + sizeof(memblk_free_t);
+        if (full_free>= size + sizeof(memblk_allocated_t)) {
+            block_fit = right;
+            parent_free_block = left;
+            break;
+        }
+        left = right;
+        right = right->next;
+    }
+    if(first_free == NULL) {
         print_alloc_error(size);
         exit(0);
     }
+    #elif defined(BEST_FIT)
 
-    memblk_free_t *first_free_copy = first_free; //we don't want to modify the global pointer!!
+    memblk_free_t *right = first_free;
+    memblk_free_t *left = NULL;
+    memblk_free_t *best_fit_block = NULL;
+    memblk_free_t *parent_best_fit_block = NULL;
 
-    if(first_free_copy == NULL) { // not a single free node found..so we terminate here
+    uint32_t min_space=UINT32_MAX;
+    if(first_free == NULL) {
         print_alloc_error(size);
         exit(0);
     }
+    while (right!= NULL) {
+        uint32_t full_free = right->size+sizeof(memblk_free_t);
+        
+        if(full_free>=(uint32_t)size+sizeof(memblk_allocated_t) ){
+            uint32_t min_space_new=full_free-((uint32_t)size+sizeof(memblk_allocated_t));
+            
+            if(min_space_new==0){
+                best_fit_block=right;
+                parent_best_fit_block=left; 
+                break;
+                }
+                
+            else if(min_space_new>0 && min_space_new<min_space){
+                min_space=min_space_new;
+                best_fit_block=right;
+                parent_best_fit_block=left;     
+            }  
+        }
+        left = right;
+        right = right->next;
+    
+    }
+    if (best_fit_block == NULL) {
+        block_fit=NULL;
+        parent_free_block=NULL;
+        print_alloc_error(size);
+        
+    }
+    block_fit=best_fit_block;
+    parent_free_block=parent_best_fit_block;
+
+    #endif 
+    if (block_fit == NULL) {
+        print_alloc_error(size); 
+        exit(0); 
+    }
+   
+
+    uint32_t free_block_size = block_fit->size;
+    uint32_t total_free_block_size = free_block_size + sizeof(memblk_free_t);
+    //uint16_t free_block_magic_num = chosen_block->magic_number;
+    size_t max_header_size = MAX(sizeof(memblk_free_t), sizeof(memblk_allocated_t));
+    
 
     uint64_t *result = NULL;
-    uint32_t free_block_size;
-    uint32_t total_free_block_size; //including the header
-    memblk_allocated_t *new_alloc;
-    memblk_free_t *parent_free_block = NULL;
-    size_t max_header_size = MAX(sizeof(memblk_free_t), sizeof(memblk_allocated_t));
+    memblk_free_t *old_next = block_fit->next;
 
-    while(first_free_copy != NULL){
-        free_block_size = first_free_copy->size;
-        total_free_block_size = free_block_size + sizeof(memblk_free_t);
-        if(total_free_block_size >= size + sizeof(memblk_allocated_t)) { //we have sufficient space to allocate mem
-            if(total_free_block_size - (size + sizeof(memblk_allocated_t)) >= max_header_size){ //choice between split or not
+    if(total_free_block_size > size + sizeof(memblk_allocated_t)) { //we have sufficient space to allocate mem
+         memblk_allocated_t* new_alloc = (memblk_allocated_t*) block_fit;
+            if(free_block_size >= sizeof(memblk_free_t)+(uint32_t)size){ //made it less strict here, to not have a lot of whole blocks that are taken
                 // we split..
-                memblk_allocated_t* new_alloc = (memblk_allocated_t*) first_free_copy;
+               
                 new_alloc->size = size;
                 new_alloc->free = 0;
                 new_alloc->payload = (uint64_t*)((uint8_t*)new_alloc + sizeof(memblk_allocated_t));
 
                 memblk_free_t* new_free = (memblk_free_t*) ((uint8_t*)new_alloc + sizeof(memblk_allocated_t) + size);
-                new_free->size = free_block_size - (sizeof(memblk_allocated_t) + size);
-                new_free->next = first_free_copy->next;
-                result = new_alloc->payload;
+                //new_free->size = free_block_size - (sizeof(memblk_allocated_t) + size);
+                new_free->size=free_block_size-(uint32_t)size-sizeof(memblk_free_t);
+                
                 if(parent_free_block == NULL){
                     first_free = new_free;
                 }
                 else {
                     parent_free_block->next = new_free;
                 }
+                new_free->next = old_next;
+                result = new_alloc->payload;
             }
             else {
                 //we keep the entire block for ourselves
                 if(parent_free_block != NULL){
-                    parent_free_block->next = first_free_copy->next;
+                    parent_free_block->next = old_next;
                 }
                 else{
-                    first_free = first_free_copy->next;
+                    first_free = old_next;
                 }
-                new_alloc = (memblk_allocated_t*) first_free_copy;
+                //new_alloc = (memblk_allocated_t*) first_free_copy;
                 new_alloc->size = total_free_block_size - sizeof(memblk_allocated_t);
                 new_alloc->free = 0; 
                 new_alloc->payload = (uint64_t*)((uint8_t*)new_alloc + sizeof(memblk_allocated_t));
                 result = new_alloc->payload;
             }
-            break; //we finished our duty and found a free space
+             
         }
-        else { // we're searching for the next free block struct and update the parent pointer
-            if(first_free_copy->next != NULL){
-                parent_free_block = first_free_copy;
-                first_free_copy = first_free_copy->next;
-            }
-            else { // we didn't find a free space for the specific alloc req
-                first_free_copy = NULL; // we didn't find a free space for the specific alloc req
-                print_alloc_error(size);
-                exit(0);
-            }
-        }
-    }
-   
+        
+
     print_alloc_info((uint64_t*) result, size);
     return result;
+    
+    //return NULL;
 }
 
 void memory_free(void *p)
 {
+    
     print_free_info(p);
 
     if(p == NULL){
@@ -198,23 +248,25 @@ void memory_free(void *p)
     else{
         left->next=free_block;
     }
-
-    if(free_block->next!=NULL){
-        memblk_free_t *end_free_block=(memblk_free_t*)((uint8_t*)free_block + sizeof(memblk_free_t) + free_block->size); //modified here
-
-        if(end_free_block==free_block->next){
-            free_block->size=free_block->size+free_block->next->size+sizeof(memblk_free_t);
-            free_block->next=free_block->next->next; 
-        }
-    }
     
+
     if(left!=NULL){
         memblk_free_t *end_left_block=(memblk_free_t*)((uint8_t*)left + sizeof(memblk_free_t) + left->size); //modified here
-        if(end_left_block==free_block){
-            left->size=free_block->size+left->size+sizeof(memblk_free_t);
+        if((uint8_t*)end_left_block == (uint8_t*)free_block){
+            left->size+=free_block->size+sizeof(memblk_free_t);
             left->next=free_block->next;
             free_block=left;
         }
+    }
+    while(free_block->next!=NULL &&  ((memblk_free_t*)((uint8_t*)free_block + sizeof(memblk_free_t) + free_block->size)== free_block->next)){
+        //memblk_free_t *end_free_block=); //modified here
+            free_block->size+=free_block->next->size+sizeof(memblk_free_t);
+            free_block->next=free_block->next->next; 
+        
+    }
+    printf("Free list after free:\n");
+    for (memblk_free_t *cur = first_free; cur; cur = cur->next) {
+        printf("  block @%p, size=%u, next=%p\n", (void*)cur, cur->size, (void*)cur->next);
     }
 }
 
