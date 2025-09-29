@@ -23,24 +23,7 @@ memblk_free_t *first_free;
 
 #define ULONG(x)((long unsigned int)(x))
 
-
-#if defined(FIRST_FIT)
- 
-/* TODO: code specific to the FIRST FIT allocation policy can be
- * inserted here */
-
-/* You can define here functions that will be compiled only if the
- * symbol FIRST_FIT is defined, that is, only if the selected policy
- * is FF */
-
- void* memory_alloc(size_t size);
-
-#elif defined(BEST_FIT)
-
-/* TODO: code specific to the BEST FIT allocation policy can be
- * inserted here */
-
-#elif defined(NEXT_FIT)
+#if defined(NEXT_FIT)
 
 /* TODO: code specific to the NEXT FIT allocation policy can be
  * inserted here */
