@@ -108,14 +108,6 @@ void *memory_alloc(size_t size){
         right = right->next;
     }
 
-    if (best_fit_block == NULL) {
-        debug_printf("No free block found when calling %s for size = %ld \n", __FUNCTION__, size);
-        block_fit = NULL;
-        parent_free_block = NULL;
-        print_alloc_error(size);
-        exit(0);
-    }
-
     block_fit = best_fit_block;
     parent_free_block = parent_best_fit_block;
 
@@ -176,14 +168,14 @@ void *memory_alloc(size_t size){
     memblk_free_t *old_next = block_fit->next;
 
     memblk_allocated_t* new_alloc = (memblk_allocated_t*) block_fit;
-    if(free_block_size >= sizeof(memblk_allocated_t) + (uint32_t)size){ //FLAG
+    if(free_block_size >= sizeof(memblk_allocated_t) + (uint32_t)size){ 
         // we split..
         new_alloc->size = size;
         new_alloc->free = 0;
         new_alloc->payload = (uint64_t*)((uint8_t*)new_alloc + sizeof(memblk_allocated_t));
 
         memblk_free_t* new_free = (memblk_free_t*) ((uint8_t*)new_alloc + sizeof(memblk_allocated_t) + size);
-        new_free->size = free_block_size - ((uint32_t)size + sizeof(memblk_allocated_t)); //FLAG
+        new_free->size = free_block_size - ((uint32_t)size + sizeof(memblk_allocated_t));
         
         if(parent_free_block == NULL){
             first_free = new_free;
@@ -224,7 +216,7 @@ void memory_free(void *p)
         exit(0);
     }
 
-    memblk_allocated_t *full_alloc_block = (memblk_allocated_t*)((uint8_t*)p - sizeof(memblk_allocated_t)); // modified here
+    memblk_allocated_t *full_alloc_block = (memblk_allocated_t*)((uint8_t*)p - sizeof(memblk_allocated_t)); 
 
     if(full_alloc_block->free) {
         debug_printf("Called free on a free block addr at %s\n",__FUNCTION__);
@@ -246,7 +238,7 @@ void memory_free(void *p)
     memblk_free_t *left = NULL;
     memblk_free_t *right = first_free;
 
-    while (right != NULL && free_block >= right) { //replaced > by >=
+    while (right != NULL && free_block >= right) { 
         left = right;
         right = right->next;
     }
@@ -262,7 +254,7 @@ void memory_free(void *p)
     }
     
     if(left!=NULL){
-        memblk_free_t *end_left_block=(memblk_free_t*)((uint8_t*)left + sizeof(memblk_free_t) + left->size); //modified here
+        memblk_free_t *end_left_block=(memblk_free_t*)((uint8_t*)left + sizeof(memblk_free_t) + left->size); 
         if((uint8_t*)end_left_block == (uint8_t*)free_block){
             left->size+=free_block->size+sizeof(memblk_free_t);
             left->next=free_block->next;
