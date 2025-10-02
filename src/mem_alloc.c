@@ -22,7 +22,6 @@ memblk_free_t *next_fit_current_block;
 
 #define ULONG(x)((long unsigned int)(x))
 
-//maybe we add bool free on a free block just in case we call double free on the same addr? (It should throw an error)
 
 void run_at_exit(void)
 {
@@ -217,6 +216,8 @@ void memory_free(void *p)
     }
 
     memblk_allocated_t *full_alloc_block = (memblk_allocated_t*)((uint8_t*)p - sizeof(memblk_allocated_t)); 
+
+    //free block or an allocated block TODO: 
 
     if(full_alloc_block->free) {
         debug_printf("Called free on a free block addr at %s\n",__FUNCTION__);
