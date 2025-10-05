@@ -60,6 +60,7 @@ void *memory_alloc(size_t size){
     
     memblk_free_t *block_fit = NULL;
     memblk_free_t *parent_free_block = NULL;
+    u_int8_t alignment=16;
 
     #if defined(FIRST_FIT)
     
@@ -165,13 +166,33 @@ void *memory_alloc(size_t size){
 
     uint64_t *result = NULL;
     memblk_free_t *old_next = block_fit->next;
+    uintptr_t ptr_header;
+    uintptr_t ptr_payload;
 
     memblk_allocated_t* new_alloc = (memblk_allocated_t*) block_fit;
-    if(free_block_size >= sizeof(memblk_allocated_t) + (uint32_t)size){ 
+    ptr_header = ((uintptr_t)new_alloc);
+    
+    uintptr_t padding=0;
+    if(ptr_header%16!=0){
+        padding=(16-(ptr_header%16));
+    }
+    ptr_header+=padding;
+    new_alloc=(memblk_allocated_t*) ptr_header;
+    uintptr_t padding_payload=0;
+    if(free_block_size >= sizeof(memblk_allocated_t) +padding+ (uint32_t)size){ 
         // we split..
         new_alloc->size = size;
         new_alloc->free = 0;
+
         new_alloc->payload = (uint64_t*)((uint8_t*)new_alloc + sizeof(memblk_allocated_t));
+        ptr_payload=((uintptr_t)new_alloc->payload);
+        
+        if(ptr_payload%16!=0){
+        padding_payload=(16-(ptr_payload%16));
+        ptr_payload+=padding_payload;
+        new_alloc->payload=(uint64_t*)ptr_payload;
+    }
+        
 
         memblk_free_t* new_free = (memblk_free_t*) ((uint8_t*)new_alloc + sizeof(memblk_allocated_t) + size);
         new_free->size = free_block_size - ((uint32_t)size + sizeof(memblk_allocated_t));
@@ -184,7 +205,15 @@ void *memory_alloc(size_t size){
         }
         new_free->next = old_next;
         next_fit_current_block = new_free;
-        result = new_alloc->payload;
+
+
+        
+        
+        result=new_alloc->payload;
+
+
+    
+        
     }
     else {
         //we keep the entire block for ourselves
@@ -194,10 +223,18 @@ void *memory_alloc(size_t size){
         else{
             first_free = old_next;
         }
-        new_alloc->size = total_free_block_size - sizeof(memblk_allocated_t);
+        new_alloc->size = total_free_block_size - padding-sizeof(memblk_allocated_t);
         new_alloc->free = 0; 
+        
         new_alloc->payload = (uint64_t*)((uint8_t*)new_alloc + sizeof(memblk_allocated_t));
+        if(ptr_payload%16!=0){
+        padding_payload=(16-(ptr_payload%16));
+        ptr_payload+=padding_payload;
+        new_alloc->payload=(uint64_t*)ptr_payload;
+    }
+        
         next_fit_current_block = old_next;
+
         result = new_alloc->payload;
     } 
  
