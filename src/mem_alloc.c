@@ -39,8 +39,6 @@ void run_at_exit(void)
 }
 
 
-
-
 void memory_init(void)
 {
     atexit(run_at_exit);
@@ -53,19 +51,18 @@ void memory_init(void)
     next_fit_current_block = first_free;
 }
 
-uint8_t calculate_payload_padding_size(memblk_free_t* free_block) {
-    uint8_t* payload_addr = (uint8_t*) free_block + sizeof(memblk_allocated_t) + 1;
-    uint8_t mod_result = (uint8_t) ((uintptr_t)payload_addr % MEM_ALIGNMENT);
-    
-    return mod_result == 0 ? 1 : MEM_ALIGNMENT - mod_result; // we need at LEAST 1 padding to store payload padding info
-}
-
-
 uint8_t calculate_header_padding_size(memblk_free_t* free_block){
     uint8_t mod_result = (uint8_t) ((uintptr_t)free_block % MEM_ALIGNMENT);
         
     return mod_result == 0 ? 0 : MEM_ALIGNMENT - mod_result;
 
+}
+
+uint8_t calculate_payload_padding_size(memblk_free_t* free_block) {
+    uint8_t* payload_addr = (uint8_t*) free_block + sizeof(memblk_allocated_t) + 1;
+    uint8_t mod_result = (uint8_t) ((uintptr_t)payload_addr % MEM_ALIGNMENT);
+    
+    return mod_result == 0 ? 1 : MEM_ALIGNMENT - mod_result; // we need at LEAST 1 padding to store payload padding info
 }
 
 void *memory_alloc(size_t size){
@@ -198,9 +195,13 @@ void *memory_alloc(size_t size){
         new_alloc->padding_header = final_padding_header;
         new_alloc->payload = (uint64_t*)((uint8_t*)new_alloc + sizeof(memblk_allocated_t) + final_padding_payload); 
         uint8_t* store_padding_payload = (uint8_t*) new_alloc - 1;
-        *store_padding_payload = final_padding_payload - 1; //2^8 = 256 so 1 mem addr is enough to store this info, and - 1 because we store that info in the padding, we'll always have atleast 1 padding
+        *store_padding_payload = final_padding_payload; //2^8 = 256 so 1 mem addr is enough to store this info, and - 1 because we store that info in the padding, we'll always have atleast 1 padding
         memblk_free_t* new_free = (memblk_free_t*) ((uint8_t*)new_alloc + sizeof(memblk_allocated_t) + size + final_padding_payload);
+        uint8_t padding_header_new_free = calculate_header_padding_size(new_free);
+        new_free = (memblk_free_t*)((uint8_t*) new_free + padding_header_new_free);
         new_free->size = free_block_size - ((uint32_t)size + sizeof(memblk_allocated_t) + final_padding_header + final_padding_payload);
+        new_free->padding_header = padding_header_new_free;
+
         
         if(parent_free_block == NULL){
             first_free = new_free;
@@ -227,7 +228,7 @@ void *memory_alloc(size_t size){
         new_alloc->padding_header = final_padding_header;
         new_alloc->payload = (uint64_t*)((uint8_t*)new_alloc + sizeof(memblk_allocated_t) + final_padding_payload);
         uint8_t* store_padding_payload = (uint8_t*) new_alloc - 1;
-        *store_padding_payload = final_padding_payload - 1;
+        *store_padding_payload = final_padding_payload;
         next_fit_current_block = old_next;
         result = new_alloc->payload;
     } 
@@ -260,7 +261,10 @@ void memory_free(void *p)
     full_alloc_block->free=1;
     
     memblk_free_t *free_block=(memblk_free_t *)((uint8_t*) full_alloc_block - full_alloc_block->padding_header);
-
+    
+    uint8_t padding_header_new_free = calculate_header_padding_size(free_block);
+    free_block = (memblk_free_t*)((uint8_t*) free_block + padding_header_new_free);
+    free_block->padding_header = padding_header_new_free;
     free_block->size = full_alloc_block->padding_header + sizeof(memblk_allocated_t) + *payload_padding_info + full_alloc_block->size - sizeof(memblk_free_t);
 
     if(first_free == NULL){ //added this condition in case the heap is full so we don't have to follow with the rest of the code
@@ -288,15 +292,15 @@ void memory_free(void *p)
     }
     
     if(left!=NULL){
-        memblk_free_t *end_left_block=(memblk_free_t*)((uint8_t*)left + sizeof(memblk_free_t) + left->size); 
+        memblk_free_t *end_left_block=(memblk_free_t*)((uint8_t*)left + sizeof(memblk_free_t) + left->size + free_block->padding_header); 
         if((uint8_t*)end_left_block == (uint8_t*)free_block){
             left->size+=free_block->size+sizeof(memblk_free_t);
             left->next=free_block->next;
             free_block=left;
         }
     }
-    while(free_block->next!=NULL && ((memblk_free_t*)((uint8_t*)free_block + sizeof(memblk_free_t) + free_block->size) == free_block->next)){
-        free_block->size+=free_block->next->size+sizeof(memblk_free_t);
+    while(free_block->next!=NULL && ((memblk_free_t*)((uint8_t*)free_block + sizeof(memblk_free_t) + free_block->size + free_block->next->padding_header)  == free_block->next)){
+        free_block->size+=free_block->next->size+sizeof(memblk_free_t)+free_block->next->padding_header;
         free_block->next=free_block->next->next;
     }
     printf("Free list after free:\n");

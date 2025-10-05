@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 struct memblk_free{
+    uint8_t padding_header;
     uint32_t size;
     struct memblk_free *next;
 }; 
