@@ -11,6 +11,7 @@ typedef struct memblk_free memblk_free_t;
 struct memblk_allocated{
     uint32_t size;
     bool free;
+    uint8_t padding_header;
     uint64_t *payload;
 };
 typedef struct memblk_allocated memblk_allocated_t;
