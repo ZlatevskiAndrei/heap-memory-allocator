@@ -25,13 +25,6 @@ memblk_free_t *next_fit_current_block;
 
 void run_at_exit(void)
 {
-    if(first_free != NULL){
-        memblk_free_t* iterable = first_free;
-        while(iterable != NULL){
-            fprintf(stdout,"WARNING: Mem block at %p with a size of %d is not freed\n", iterable, iterable->size);
-            iterable = iterable->next;
-        }
-    }
     debug_printf("Starting munmap procedure at %s\n", __FUNCTION__);
     int res = my_munmap(heap_begin, MEM_POOL_SIZE);
     first_free = NULL;
