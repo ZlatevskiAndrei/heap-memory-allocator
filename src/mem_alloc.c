@@ -25,6 +25,23 @@ memblk_free_t *next_fit_current_block;
 
 void run_at_exit(void)
 {
+    size_t iter = 0;
+    uint64_t* p = heap_begin;
+    memblk_free_t* first_free_copy = first_free; 
+    size_t end = MEM_POOL_SIZE;
+    while(iter < end){
+        if((uint64_t*)first_free_copy == p){ 
+            p = (uint64_t*)((uint8_t*)p + sizeof(memblk_free_t) + first_free_copy->size);
+            iter += sizeof(memblk_free_t) + first_free_copy->size;
+            first_free_copy = first_free_copy->next;
+        }
+        else { 
+            memblk_allocated_t* alloc = (memblk_allocated_t*) p;
+            fprintf(stdout, "WARNING: Memory leak detected at addr: %p with a size of %d bytes!\n", alloc, alloc->size);
+            p = (uint64_t*)((uint8_t*)p + sizeof(memblk_allocated_t) + alloc->size);
+            iter += sizeof(memblk_allocated_t) + alloc->size;
+        }
+    }
     debug_printf("Starting munmap procedure at %s\n", __FUNCTION__);
     int res = my_munmap(heap_begin, MEM_POOL_SIZE);
     first_free = NULL;
