@@ -24,6 +24,7 @@ uint8_t MAGIC_NUMBER;
 
 #define ULONG(x)((long unsigned int)(x))
 
+#define MAX_MAGIC_NUMBER 255
 
 void run_at_exit(void)
 {
@@ -64,7 +65,7 @@ void memory_init(void)
     heap_begin = (uint64_t*) my_mmap(MEM_POOL_SIZE);
     assert(heap_begin != NULL);
     debug_printf("Started memory init at %p\n", heap_begin);
-    MAGIC_NUMBER = rand() % 255;
+    MAGIC_NUMBER = rand() % MAX_MAGIC_NUMBER;
     first_free = (memblk_free_t*)heap_begin;
     first_free->size = (uint32_t) MEM_POOL_SIZE - sizeof(memblk_free_t);
     first_free->next = NULL;
@@ -239,8 +240,6 @@ void *memory_alloc(size_t size){
 void memory_free(void *p)
 {
     
-    print_free_info(p);
-
     if(p == NULL){
         debug_printf("Pointer argument is NULL at %s \n", __FUNCTION__); //added this base case
         exit(0);
@@ -257,6 +256,8 @@ void memory_free(void *p)
         debug_printf("Called free on a free block addr at %s\n",__FUNCTION__);
         exit(0);
     }
+
+    print_free_info(p);
 
     full_alloc_block->free=1;
     
