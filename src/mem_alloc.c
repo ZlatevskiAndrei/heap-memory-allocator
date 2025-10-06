@@ -8,7 +8,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-
+#include <time.h>
 
 #include "mem_alloc_types.h"
 #include "my_mmap.h"
@@ -19,6 +19,8 @@ void *heap_begin;
 memblk_free_t *first_free; 
 
 memblk_free_t *next_fit_current_block; 
+
+uint8_t MAGIC_NUMBER;
 
 #define ULONG(x)((long unsigned int)(x))
 
@@ -56,15 +58,19 @@ void run_at_exit(void)
 
 
 void memory_init(void)
-{
+{   
+    srand(time(NULL));
     atexit(run_at_exit);
     heap_begin = (uint64_t*) my_mmap(MEM_POOL_SIZE);
     assert(heap_begin != NULL);
     debug_printf("Started memory init at %p\n", heap_begin);
+    MAGIC_NUMBER = rand() % 255;
     first_free = (memblk_free_t*)heap_begin;
     first_free->size = (uint32_t) MEM_POOL_SIZE - sizeof(memblk_free_t);
     first_free->next = NULL;
+    first_free->free_magic_number = MAGIC_NUMBER;
     next_fit_current_block = first_free;
+
 }
 
 void *memory_alloc(size_t size){
@@ -170,6 +176,12 @@ void *memory_alloc(size_t size){
 
     #endif 
 
+    if(block_fit->free_magic_number != MAGIC_NUMBER){
+        debug_printf("Unauthorized block found when calling %s for size = %ld \n", __FUNCTION__, size);
+        print_alloc_error(size); 
+        exit(0);  
+    }
+
     if (block_fit == NULL) {
         debug_printf("No free block found when calling %s for size = %ld \n", __FUNCTION__, size);
         print_alloc_error(size); 
@@ -189,10 +201,11 @@ void *memory_alloc(size_t size){
         new_alloc->size = size;
         new_alloc->free = 0;
         new_alloc->payload = (uint64_t*)((uint8_t*)new_alloc + sizeof(memblk_allocated_t));
+        new_alloc->alloc_magic_number = MAGIC_NUMBER;
 
         memblk_free_t* new_free = (memblk_free_t*) ((uint8_t*)new_alloc + sizeof(memblk_allocated_t) + size);
         new_free->size = free_block_size - ((uint32_t)size + sizeof(memblk_allocated_t));
-        
+        new_free->free_magic_number = MAGIC_NUMBER;
         if(parent_free_block == NULL){
             first_free = new_free;
         }
@@ -214,6 +227,7 @@ void *memory_alloc(size_t size){
         new_alloc->size = total_free_block_size - sizeof(memblk_allocated_t);
         new_alloc->free = 0; 
         new_alloc->payload = (uint64_t*)((uint8_t*)new_alloc + sizeof(memblk_allocated_t));
+        new_alloc->alloc_magic_number = MAGIC_NUMBER;
         next_fit_current_block = old_next;
         result = new_alloc->payload;
     } 
@@ -234,6 +248,11 @@ void memory_free(void *p)
 
     memblk_allocated_t *full_alloc_block = (memblk_allocated_t*)((uint8_t*)p - sizeof(memblk_allocated_t)); 
 
+    if(full_alloc_block->alloc_magic_number != MAGIC_NUMBER){
+        debug_printf("Corrupted metadata access attempt at %s\n",__FUNCTION__);
+        exit(0);       
+    }
+
     if(full_alloc_block->free) {
         debug_printf("Called free on a free block addr at %s\n",__FUNCTION__);
         exit(0);
@@ -244,6 +263,7 @@ void memory_free(void *p)
     memblk_free_t *free_block=(memblk_free_t *) full_alloc_block;
 
     free_block->size=full_alloc_block->size;
+    free_block->free_magic_number = MAGIC_NUMBER;
 
     if(first_free == NULL){ //added this condition in case the heap is full so we don't have to follow with the rest of the code
         first_free = free_block;
